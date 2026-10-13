@@ -6,8 +6,10 @@ computers than others, a Mac's than Linux's), so words that only just fit here d
 
 from __future__ import annotations
 
+import time
+
 import pytest
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QAbstractAnimation, QEventLoop, QTimer
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
 
@@ -30,11 +32,25 @@ def fonts(qapp, request):
     QApplication.setFont(before)
 
 
-def wait(ms: int = tokens.DOCK_MS + 60) -> None:
-    """Long enough for the side panel to finish sliding in."""
+def wait(ms: int) -> None:
     loop = QEventLoop()
     QTimer.singleShot(ms, loop.quit)
     loop.exec()
+
+
+def settle(w) -> None:
+    """Let the screen come to rest: the side panel finishes sliding in or out (half on screen until then).
+    On a slow computer that takes longer than DOCK_MS, so wait for the slide itself, not the clock."""
+    wait(tokens.DOCK_MS + 60)
+    dock = getattr(w, "dock", None)
+    until = time.monotonic() + 10
+    while (
+        dock is not None
+        and dock._anim.state() == QAbstractAnimation.State.Running
+        and time.monotonic() < until
+    ):
+        wait(20)
+    wait(20)  # the last step's layout and paint
 
 
 class Seen:
@@ -44,7 +60,7 @@ class Seen:
         self.found: list[str] = []
 
     def check(self, where: str, w) -> None:
-        wait()
+        settle(w)
         self.found += [f"{where}: {x}" for x in cut_off(w)]
 
 
@@ -55,7 +71,7 @@ def window(lib, size):
     w._restored = True
     w.resize(*size)
     w.show()
-    wait()
+    settle(w)
     return w
 
 
