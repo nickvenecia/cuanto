@@ -5,6 +5,9 @@ A template is the shape of a budget: the categories and accounts people expect, 
 (their amounts and units already tied to the schedule's globals), the usual fringes on crew and cast, and
 the usual fees on the top sheet. Rates start empty: they're yours to fill in (or bring from the rate
 library). Fringe percentages are typical starting points; check them with your payroll company.
+
+Your own templates are budgets you saved to start from (from_budget): kept without what's only about that
+production, and copied with new ids for every budget started from them (build_from).
 """
 
 from __future__ import annotations
@@ -18,6 +21,9 @@ from cuanto.core.model import (
     Fringe,
     Global,
     Line,
+    Template,
+    new_id,
+    now_iso,
 )
 
 # fringe sets, by key (each template names the fringes it makes)
@@ -1187,3 +1193,53 @@ def build(kind: str, name: str = "") -> Budget:
 def choices() -> list[tuple[str, str]]:
     """(kind, name) for every template, in the order they're offered."""
     return [(k, KIND_NAMES[k]) for k in TEMPLATES]
+
+
+# ---------------------------------------------------------------------------- your own
+MINE = "mine:"  # a New Budget choice that's one of your templates: "mine:<id>"
+PRODUCTION_ONLY = ("client", "director", "producer", "dates", "location")  # info a template doesn't keep
+
+
+def from_budget(b: Budget, name: str, keep_rates: bool = True) -> Template:
+    """A template of a budget: everything that shapes it, without what's only about that production (its
+    client, people, dates and place; what was spent). Its rates too, unless `keep_rates` is off."""
+    copy = Budget.from_dict(b.to_dict())
+    copy.name, copy.stage, copy.family = name, "bid", ""
+    for key in PRODUCTION_ONLY:
+        setattr(copy.info, key, "")
+    for _c, _a, ln in copy.lines():
+        ln.actual = ""
+        if not keep_rates:
+            ln.rate = ln.rate_id = ""
+    return Template(name=name, budget=copy)
+
+
+def build_from(t: Template, name: str = "") -> Budget:
+    """A new budget from one of your templates. Every part gets a new id, so budgets started from the same
+    template are never taken for versions of one another."""
+    b = Budget.from_dict(t.budget.to_dict())
+    b.id, b.name, b.family, b.stage = new_id(), name, "", "bid"
+    b.created = b.updated = now_iso()
+    fringe_ids = {}  # old id -> new, for the lines they're on
+    for f in b.fringes:
+        old, f.id = f.id, new_id()
+        fringe_ids[old] = f.id
+    for part in (*b.globals, *b.adjustments):
+        part.id = new_id()
+    for c in b.categories:
+        c.id = new_id()
+        for a in c.accounts:
+            a.id = new_id()
+            for ln in a.lines:
+                ln.id = new_id()
+                ln.fringes = [fringe_ids[f] for f in ln.fringes if f in fringe_ids]
+    return b
+
+
+def start(key: str, name: str = "", mine: dict[str, Template] | None = None) -> Budget:
+    """A new budget from a New Budget choice: a template here ("feature") or one of yours ("mine:<id>"; a
+    blank budget if it's gone)."""
+    if key.startswith(MINE):
+        t = (mine or {}).get(key[len(MINE) :])
+        return build_from(t, name) if t is not None else build("blank", name)
+    return build(key, name)

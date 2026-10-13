@@ -168,14 +168,47 @@ class EditingMixin:
         from cuanto.ui.dialogs.pickers import NewBudgetDialog
 
         self.flush()
-        d = NewBudgetDialog(self, kind or "feature")
+        last = self.lib.settings.get("new_from")  # where the last new budget started
+        d = NewBudgetDialog(
+            self, kind or (last if isinstance(last, str) else "feature"), self.lib.ordered_templates()
+        )
         if d.exec() != NewBudgetDialog.DialogCode.Accepted:
             return
-        b = templates.build(d.kind, d.name)
+        b = templates.start(d.kind, d.name, self.lib.templates)
         self.lib.add_budget(b)
-        log.info("new budget from %s", d.kind)
+        log.info("new budget from %s", "a template of yours" if d.kind.startswith(templates.MINE) else d.kind)
+        self.lib.settings["new_from"] = d.kind
+        self.lib.save_settings()
         self.go(f"budget:{b.id}")
         self.toast(f"Made {b.name or 'a new budget'}.", "done")
+
+    def save_as_template(self, budget_id: str = "") -> None:
+        """Keep a budget as a template of yours, to start new budgets from."""
+        from cuanto.ui.dialogs.pickers import SaveTemplateDialog
+
+        if not budget_id:
+            picked = self.open_kind == "budget" and self.budget_panel.budget is not None
+            budget_id = self.budget_panel.budget.id if picked else (self.budget.id if self.budget else "")
+        src = self.lib.budgets.get(budget_id)
+        if src is None:
+            return
+        self.flush()
+        d = SaveTemplateDialog(self, src.name)
+        if d.exec() != SaveTemplateDialog.DialogCode.Accepted:
+            return
+        old = self.lib.template_named(d.name)
+        if old is not None and not confirm(
+            self, f"Replace {old.name}?", "Budgets started from it stay as they are.", "Replace"
+        ):
+            return
+        try:
+            t = self.lib.add_template(templates.from_budget(src, d.name, d.keep_rates))
+        except OSError:
+            log.warning("couldn't save a template", exc_info=True)
+            self.toast("Couldn't save. Check that there's free space on this computer.", "problem")
+            return
+        self.refresh()
+        self.toast(f"Saved {t.name} as a template.", "done")
 
     def _target_account(self) -> Account | None:
         """Where a new line goes: the account that's open or picked, else the first one on this page."""
@@ -647,6 +680,7 @@ class EditingMixin:
             items = [
                 ("receipt", "Open Top Sheet", lambda: self.go(f"budget:{obj_id}")),
                 ("copy", "Duplicate", lambda: self.duplicate("budget", obj_id)),
+                ("file", "Save as Template…", lambda: self.save_as_template(obj_id)),
                 ("share", "Export JSON…", lambda: self.export_json(obj_id)),
             ]
         elif kind == "line":
@@ -686,6 +720,7 @@ class EditingMixin:
             ("receipt", "Open Top Sheet", lambda: self.go(key)),
             ("edit", "Budget Details…", lambda: self.budget_details(bid)),
             ("copy", "Duplicate", lambda: self.duplicate("budget", bid)),
+            ("file", "Save as Template…", lambda: self.save_as_template(bid)),
             ("", "-", None),
             ("trash", "Delete…", lambda: self.delete_many([("budget", bid)])),
         ]).exec(pos)  # fmt: skip

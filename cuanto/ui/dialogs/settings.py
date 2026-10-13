@@ -2,6 +2,7 @@
 
     General             Appearance, Accent Color; updates
     Profiles            your profiles (name, logo, contact, paper), edited right here
+    Templates           your own templates: rename or delete them
     Account             sign in or out
     Keyboard Shortcuts  every key, read from the menus
     Your Data           the folder, Back Up
@@ -13,9 +14,10 @@ settings (Send Feedback, About) have their own windows.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QLabel, QPushButton, QStackedWidget, QWidget
+from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QPushButton, QStackedWidget, QWidget
 
 from cuanto import __version__
+from cuanto.core.model import KIND_NAMES, Template
 from cuanto.core.paths import data_dir
 from cuanto.core.store import Library
 from cuanto.services import account
@@ -32,12 +34,14 @@ from cuanto.ui.components.widgets import (
     hbox,
     vbox,
 )
+from cuanto.ui.dialogs.common import confirm
 from cuanto.ui.style import tokens
 
 LOOKS = [("system", "Match System"), ("light", "Light"), ("dark", "Dark")]
 PANES = [
     ("general", "General", "cog"),
     ("profiles", "Profiles", "user"),
+    ("templates", "Templates", "file"),
     ("account", "Account", "key"),
     ("shortcuts", "Keyboard Shortcuts", "keyboard"),
     ("data", "Your Data", "box"),
@@ -92,6 +96,7 @@ class SettingsDialog(QDialog):
             self.panes[key] = holder
         self._build_general()
         self._build_profiles()
+        self._build_templates()
         self._build_account()
         self._build_shortcuts()
         self._build_data()
@@ -225,6 +230,57 @@ class SettingsDialog(QDialog):
         self._profile_id = saved or None
         self._build_profiles()
         self.win.toast("Profile deleted." if not saved else "Profile saved.", "done")
+
+    # ------------------------------------------------------------------ Templates
+    def _build_templates(self) -> None:
+        w, lay = self._column()
+        mine = self.lib.ordered_templates()
+        if not mine:
+            none = QLabel("No templates yet.")
+            none.setObjectName("Muted")
+            lay.addWidget(none)
+        for t in mine:
+            sec = Section(KIND_NAMES.get(t.budget.kind, ""))
+            row = hbox(spacing=tokens.SPACE_2)
+            name = QLineEdit(t.name)
+            name.setPlaceholderText("Template name")
+            name.editingFinished.connect(lambda t=t, name=name: self._rename_template(t, name))
+            row.addWidget(name, 1)
+            delete = QPushButton("Delete…")
+            delete.setObjectName("Danger")
+            delete.clicked.connect(lambda _c=False, t=t: self._delete_template(t))
+            row.addWidget(delete)
+            sec.add(row)
+            lay.addWidget(sec)
+        lay.addStretch(1)
+        self._fill("templates", w)
+
+    def _rename_template(self, t: Template, field: QLineEdit) -> None:
+        new = field.text().strip()
+        if not new or new == t.name:
+            field.setText(t.name)
+            return
+        other = self.lib.template_named(new)
+        if other is not None and other is not t:
+            field.setText(t.name)
+            self.win.toast(f"There's already a template called {other.name}.", "problem")
+            return
+        t.name = new
+        self.lib.save_templates()
+        self.win.refresh()
+
+    def _delete_template(self, t: Template) -> None:
+        if not confirm(
+            self,
+            f"Delete {t.name or 'this template'}?",
+            "Budgets started from it stay as they are.",
+            "Delete",
+        ):
+            return
+        self.lib.delete_template(t.id)
+        self.win.refresh()
+        self._build_templates()
+        self.win.toast("Deleted it.", "done")
 
     # ------------------------------------------------------------------ Account
     def _build_account(self) -> None:

@@ -16,21 +16,22 @@ Layers only ever call downward: `ui/` uses `core/`, `doc/` and `services/`; thos
 cuanto/
   core/            Budgets, their numbers and their files. No Qt imports, ever. Testable without a screen.
     model.py       Budget > Category (a top-sheet row, in a section) > Account > Line; Global, Fringe, Adjustment
-                   (a top-sheet fee), BudgetInfo; Rate (the library); Profile. to_dict()/from_dict() tolerate old,
-                   new and broken files. Room already for versions (family, stage, Line.actual) and currencies
-                   (Line.currency, Budget.fx)
+                   (a top-sheet fee), BudgetInfo; Template (yours); Rate (the library); Profile. to_dict()/
+                   from_dict() tolerate old, new and broken files. Room already for versions (family, stage,
+                   Line.actual) and currencies (Line.currency, Budget.fx)
     formula.py     what an amount, units or rate can be: a number or arithmetic over globals. A small parser of
                    its own: never eval
     calc.py        THE numbers: lines (amount × units × rate), fringes (percent with a cap, or flat per unit),
                    accounts, categories, sections, above/below the line, fees, the grand total; globals resolved
                    (loops and typos are problems in words, counted as 0); renaming a global everywhere
-    templates.py   indie feature, short film, commercial (AICP-style), music video, blank
+    templates.py   indie feature, short film, commercial (AICP-style), music video, blank; yours (a budget kept
+                   without what's only about its production, copied with new ids for each budget started from it)
     rates.py       the rate library: a line from a rate (fringes matched by name), a rate from a line, merging
     exchange.py    the JSON exchange format both ways (docs/exchange.md)
     sheets.py      CSV in (columns found by their titles), Excel out (values only; text never a formula)
     document.py    every string on the top sheet and the detail (DocView), before anything is drawn
-    store.py       Library: budgets/<id>.json, rates.json, profiles.json, settings.json; atomic writes,
-                   unreadable files set aside, snapshots before an import
+    store.py       Library: budgets/<id>.json, rates.json, profiles.json, templates.json, settings.json;
+                   atomic writes, unreadable files set aside, snapshots before an import
     history.py     undo/redo: mark() after saves and refreshes keeps the state before each change
     sample.py      the made-up Mesa Alta Pictures (tests, smoke test, screenshots)
     looks.py       the paper's colors
@@ -56,7 +57,8 @@ cuanto/
   app.py           QApplication, fonts, stylesheet, rounded popups, every QLabel plain text, one window at a
                    time, --smoke-test
   cli.py           `python -m cuanto cli …`: pages, totals, templates and CSV without a window
-tests/             one file per area; conftest.py gives every test its own empty data folder; screenshot.py
+tests/             one file per area; conftest.py gives every test its own empty data folder; screenshot.py;
+                   cut_off.py (finds words cut off in a window)
 scripts/           make_icon.py (the "c." icon), release_notes.py
 packaging/         macos/, windows/ (Inno Setup), linux/ (AppImage, .desktop, install.sh)
 docs/              exchange.md (the JSON format), screenshot.png
@@ -132,6 +134,9 @@ pyinstaller cuanto.spec --noconfirm
   (`test_a_broken_file_is_set_aside_not_lost`).
 - Tests never touch real data: `tests/conftest.py` gives every test its own empty data folder.
 - Window tests run offscreen. After any UI change, look at the screenshots in dark, light and Yellow.
+- No words cut off: `tests/test_cut_off.py` opens every screen, state, panel, dialog and Settings pane (with the
+  fonts as drawn and a tenth wider) and asks `tests/cut_off.py` for text that doesn't fit. A new screen gets a line
+  there.
 - `python -m cuanto --smoke-test` opens the window, makes the pages and an Excel file, and quits; CI runs it on the
   packaged app on every system.
 

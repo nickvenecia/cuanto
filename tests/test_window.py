@@ -283,3 +283,39 @@ def test_deleting_the_open_budget_goes_back_to_all_budgets(win, monkeypatch):
     win.delete_many([("budget", b.id)])
     assert win.budget is None and win.view_key == "budgets" and b.id not in win.lib.budgets
     assert not (Path(win.lib.root) / "budgets" / f"{b.id}.json").exists()
+
+
+def test_a_budget_saved_as_a_template_starts_the_next_one(win, monkeypatch):
+    from cuanto.ui.dialogs import pickers
+
+    b = feature(win)
+    win.go(f"budget:{b.id}")
+    monkeypatch.setattr(pickers.SaveTemplateDialog, "exec", lambda self: (self.field.setText("Ours"), 1)[1])
+    win.save_as_template()
+    t = win.lib.template_named("Ours")
+    assert t is not None and Library(win.lib.root).load().templates[t.id].budget.kind == "feature"
+
+    seen = {}
+
+    def pick_ours(self):
+        seen["choices"] = [self.template.itemData(i) for i in range(self.template.count())]
+        self.field.setText("The Next Night")
+        self.template.setCurrentIndex(self.template.findData("mine:" + t.id))
+        return 1
+
+    monkeypatch.setattr(pickers.NewBudgetDialog, "exec", pick_ours)
+    win.new_budget()
+    assert "feature" in seen["choices"] and "mine:" + t.id in seen["choices"]
+    new = win.budget
+    assert new.name == "The Next Night" and new.id != b.id
+    assert calc.totals(new).grand == calc.totals(b).grand
+    assert win.lib.settings["new_from"] == "mine:" + t.id  # offered first next time
+
+    monkeypatch.setattr("cuanto.ui.dialogs.settings.confirm", lambda *a, **k: True)
+    from cuanto.ui.dialogs.settings import SettingsDialog
+
+    d = SettingsDialog(win.lib, win, "templates")
+    d.panes["templates"].findChild(pickers.QPushButton, "Danger").click()
+    assert win.lib.templates == {} and Library(win.lib.root).load().templates == {}
+    win.undo()
+    assert t.id in win.lib.templates

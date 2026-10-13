@@ -110,19 +110,22 @@ def main(out: Path, look: str = "dark", accent: str = "") -> int:
     w.open("line", dp.id)
     shot(w, out / "15-small-window.png")
 
+    from cuanto.core import templates
     from cuanto.ui.dialogs.common import Alert
-    from cuanto.ui.dialogs.pickers import NewBudgetDialog, RatePicker
+    from cuanto.ui.dialogs.pickers import NewBudgetDialog, RatePicker, SaveTemplateDialog
     from cuanto.ui.dialogs.settings import SettingsDialog
 
     for name, d in (
         ("16-alert", Alert(w, "Delete 2701 Camera Crew?", "Its 4 lines go too.", "Delete", "Cancel", True)),
         ("17-new-budget", NewBudgetDialog(w)),
         ("18-rate-picker", RatePicker(lib.ordered_rates(), w, "")),
+        ("18-save-as-template", SaveTemplateDialog(w, feature.name)),
     ):
         d.show()
         shot(d, out / f"{name}.png")
         d.close()
-    for pane in ("general", "profiles", "shortcuts", "data"):
+    lib.add_template(templates.from_budget(feature, "Our Feature"))
+    for pane in ("general", "profiles", "templates", "shortcuts", "data"):
         d = SettingsDialog(w.lib, w, pane)
         d.show()
         shot(d, out / f"19-settings-{pane}.png")

@@ -38,10 +38,11 @@ INFO = [  # BudgetInfo field, label, placeholder
 class BudgetPanel(DetailsBase):
     KEY = "budget"
     TITLE = "Budget"
-    MORE_TIP = "Duplicate, export, delete"
+    MORE_TIP = "Duplicate, save as a template, export, delete"
 
     open_wanted = Signal(str)
     duplicate_wanted = Signal(str)
+    template_wanted = Signal(str)
     export_wanted = Signal(str)
     delete_wanted = Signal(str)
 
@@ -100,6 +101,9 @@ class BudgetPanel(DetailsBase):
         btn.clicked.connect(lambda: self.budget and self.open_wanted.emit(self.budget.id))
         self.menu_action(
             "copy", "Duplicate", lambda: self.budget and self.duplicate_wanted.emit(self.budget.id)
+        )
+        self.menu_action(
+            "file", "Save as Template…", lambda: self.budget and self.template_wanted.emit(self.budget.id)
         )
         self.menu_action(
             "share", "Export JSON…", lambda: self.budget and self.export_wanted.emit(self.budget.id)

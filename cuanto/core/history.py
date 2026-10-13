@@ -1,4 +1,5 @@
-"""Undo and redo for what you keep in Cuánto: your budgets, your rate library and your profiles.
+"""Undo and redo for what you keep in Cuánto: your budgets, your rate library, your profiles and your
+templates.
 
 The window calls mark() whenever things settle (after a save or a refresh). If anything changed since the last
 mark, the state before it becomes one undo step. Undo puts that state back and saves it. A change that's taken
@@ -11,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from cuanto.core.model import Budget, Profile, Rate
+from cuanto.core.model import Budget, Profile, Rate, Template
 
 LIMIT = 100  # steps kept
 
@@ -33,10 +34,16 @@ def state_of(lib) -> State:
         "budgets": budgets,
         "rates": rates,
         "profiles": [p.to_dict() for p in lib.profiles.values()],
+        "templates": [t.to_dict() for t in lib.templates.values()],
     }
 
 
-PARTS = [("budgets", "budgets"), ("rates", "the rate library"), ("profiles", "profiles")]
+PARTS = [
+    ("budgets", "budgets"),
+    ("rates", "the rate library"),
+    ("profiles", "profiles"),
+    ("templates", "templates"),
+]
 
 
 def describe(a: State, b: State) -> str:
@@ -115,7 +122,8 @@ class History:
     def _put(self, s: State) -> None:
         """Make the library this state, and save what differs."""
         lib = self.lib
-        old = state_of(lib)["budgets"]
+        now = state_of(lib)
+        old, old_templates = now["budgets"], now["templates"]
         for bid in list(lib.budgets):
             if bid not in s["budgets"]:
                 lib.delete_budget(bid)
@@ -124,6 +132,9 @@ class History:
                 lib.save_budget(Budget.from_dict(d))
         lib.rates = {d["id"]: Rate.from_dict(d) for d in s["rates"]}
         lib.profiles = {d["id"]: Profile.from_dict(d) for d in s["profiles"]}
+        if s["templates"] != old_templates:
+            lib.templates = {d["id"]: Template.from_dict(d) for d in s["templates"]}
+            lib.save_templates()
         lib.save_rates()
         lib.save_profiles()
         self.last = state_of(lib)
