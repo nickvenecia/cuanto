@@ -1,14 +1,16 @@
-"""Small windows for picking: a new budget (its name and the template it starts from), a rate from the
-library, an account to put a line in."""
+"""Small windows for picking: a new budget (its name and the template it starts from), a name for a budget
+kept as a template, a rate from the library, an account to put a line in."""
 
 from __future__ import annotations
+
+from collections.abc import Sequence
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QWidget
 
 from cuanto.core import money, rates, templates
-from cuanto.core.model import UNIT_NAMES, Budget, Rate
-from cuanto.ui.components.widgets import SearchField, Section, button_row, combo, vbox
+from cuanto.core.model import UNIT_NAMES, Budget, Rate, Template
+from cuanto.ui.components.widgets import SearchField, Section, ToggleRow, button_row, combo, vbox
 from cuanto.ui.style import theme, tokens
 
 
@@ -34,9 +36,10 @@ def _buttons(d: QDialog, lay, action: str) -> QPushButton:
 
 
 class NewBudgetDialog(QDialog):
-    """A name and a template. After Create: `.name`, `.kind`."""
+    """A name and a template: Cuánto's, then yours (`mine`). After Create: `.name`, and `.kind`, a key for
+    templates.start()."""
 
-    def __init__(self, parent: QWidget | None = None, kind: str = "feature"):
+    def __init__(self, parent: QWidget | None = None, kind: str = "feature", mine: Sequence[Template] = ()):
         super().__init__(parent)
         self.setMinimumWidth(tokens.DIALOG_W)
         lay = vbox(self, tokens.SPACE_5, tokens.SPACE_3)
@@ -47,7 +50,11 @@ class NewBudgetDialog(QDialog):
         sec.add(self.field)
         lay.addWidget(sec)
         sec = Section("Start From")
-        self.template = combo([(k, name, "") for k, name in templates.choices()], kind)
+        items = [(k, name, "") for k, name in templates.choices()]
+        items += [(templates.MINE + t.id, t.name or "Untitled Template", "") for t in mine]
+        self.template = combo(items, kind)
+        if mine:
+            self.template.insertSeparator(len(templates.choices()))
         sec.add(self.template)
         lay.addWidget(sec)
         _buttons(self, lay, "Create")
@@ -59,6 +66,37 @@ class NewBudgetDialog(QDialog):
     @property
     def kind(self) -> str:
         return self.template.currentData()
+
+
+class SaveTemplateDialog(QDialog):
+    """A name for a budget kept as a template, and whether its rates go with it. After Save: `.name`,
+    `.keep_rates`."""
+
+    def __init__(self, parent: QWidget | None = None, name: str = ""):
+        super().__init__(parent)
+        self.setMinimumWidth(tokens.DIALOG_W)
+        lay = vbox(self, tokens.SPACE_5, tokens.SPACE_3)
+        _title(self, "Save as Template", lay)
+        sec = Section("Name")
+        self.field = QLineEdit(name)
+        self.field.setPlaceholderText("Our Commercial")
+        self.field.selectAll()
+        sec.add(self.field)
+        lay.addWidget(sec)
+        self.rates = ToggleRow("Keep Rates", True)
+        self.rates.setToolTip("Off: lines start without a rate, as Cuánto's templates do.")
+        lay.addWidget(self.rates)
+        go = _buttons(self, lay, "Save")
+        go.setEnabled(bool(name.strip()))
+        self.field.textChanged.connect(lambda t: go.setEnabled(bool(t.strip())))
+
+    @property
+    def name(self) -> str:
+        return self.field.text().strip()
+
+    @property
+    def keep_rates(self) -> bool:
+        return self.rates.isChecked()
 
 
 def rate_words(r: Rate) -> str:

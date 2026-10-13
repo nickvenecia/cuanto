@@ -2,6 +2,13 @@
 
 Plain words for the people using Cuánto. Every version's entries are what its Release and the update window say.
 
+## 1.1.0
+
+- Make your own templates: Save as Template… keeps a budget's categories, accounts, lines, globals, fringes and
+  fees (and its rates, if you like) to start new budgets from. Its client, dates and spending stay behind.
+- New Budget lists your templates under Cuánto's, and offers the one you used last.
+- Rename or delete your templates in Settings › Templates; undo works for them too.
+
 ## 1.0.0
 
 - Build film and video budgets the way the industry reads them: a top sheet of categories (Above the Line,

@@ -55,7 +55,9 @@ below the line, production only, or everything above it, or a flat amount.
 
 **Templates.** Start from an indie feature, a short film, a commercial laid out like the AICP bid form, a music
 video, or blank. Each comes with the usual categories, accounts and lines, already tied to its schedule's globals
-and fringes. Rates start empty: they're yours.
+and fringes. Rates start empty: they're yours. Or make your own: **Save as Template…** keeps any budget's
+categories, accounts, lines, globals, fringes and fees (its rates too, if you like), without its client, dates or
+spending, and it's there under **New Budget** from then on. Rename or delete yours in Settings › Templates.
 
 **A rate library.** Keep crew rates (union and non-union, with their local) and vendor prices once and use them
 in any budget. **Use a Rate…** puts one on a line, with its fringes; **Save to Library** keeps a line's rate.

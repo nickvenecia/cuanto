@@ -270,6 +270,7 @@ class MainWindow(MenusMixin, EditingMixin, TransferMixin, PagesMixin, ServicesMi
         b = self.budget_panel
         b.open_wanted.connect(lambda i: self.go(f"budget:{i}"))
         b.duplicate_wanted.connect(lambda i: self.duplicate("budget", i))
+        b.template_wanted.connect(self.save_as_template)
         b.export_wanted.connect(self.export_json)
         b.delete_wanted.connect(lambda i: self.delete_many([("budget", i)]))
         c = self.category_panel

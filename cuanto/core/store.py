@@ -2,6 +2,7 @@
 
     budgets/<id>.json  one file per budget
     rates.json         your rate library
+    templates.json     your own templates (budgets kept to start new ones from)
     profiles.json      your profile(s): whose name goes on the paper
     settings.json      window and app preferences
     backups/           a copy of a budget before a big change (an import into it), the newest kept
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 from cuanto.core.log import get_logger
-from cuanto.core.model import Budget, Profile, Rate, new_id, now_iso
+from cuanto.core.model import Budget, Profile, Rate, Template, new_id, now_iso
 from cuanto.core.paths import data_dir
 
 log = get_logger(__name__)
@@ -115,6 +116,7 @@ class Library:
         self.budgets: dict[str, Budget] = {}
         self.rates: dict[str, Rate] = {}
         self.profiles: dict[str, Profile] = {}
+        self.templates: dict[str, Template] = {}
         self.settings: dict[str, Any] = {}
 
     @property
@@ -135,13 +137,14 @@ class Library:
                 self.budgets[b.id] = b
         self.rates = self._many("rates.json", Rate)
         self.profiles = self._many("profiles.json", Profile)
+        self.templates = self._many("templates.json", Template)
         for p in self.profiles.values():  # a logo is a file name in the logos folder, nothing more
             p.logo = Path(p.logo).name if p.logo else ""
         s = read_json(self.root / "settings.json", {})
         self.settings = s if isinstance(s, dict) else {}
         log.info(
-            "loaded %d budgets, %d rates, %d profiles from %s",
-            len(self.budgets), len(self.rates), len(self.profiles), self.root,
+            "loaded %d budgets, %d rates, %d profiles, %d templates from %s",
+            len(self.budgets), len(self.rates), len(self.profiles), len(self.templates), self.root,
         )  # fmt: skip
         return self
 
@@ -196,6 +199,9 @@ class Library:
 
     def save_profiles(self) -> None:
         write_json(self.root / "profiles.json", [p.to_dict() for p in self.profiles.values()])
+
+    def save_templates(self) -> None:
+        write_json(self.root / "templates.json", [t.to_dict() for t in self.ordered_templates()])
 
     def save_settings(self) -> None:
         write_json(self.root / "settings.json", self.settings)
@@ -279,3 +285,28 @@ class Library:
 
     def ordered_rates(self) -> list[Rate]:
         return sorted(self.rates.values(), key=lambda r: (r.department.casefold() or "~", r.name.casefold()))
+
+    # ------------------------------------------------------------------ templates
+    def ordered_templates(self) -> list[Template]:
+        """A to Z by name."""
+        return sorted(self.templates.values(), key=lambda t: (t.name.casefold(), t.created))
+
+    def template_named(self, name: str) -> Template | None:
+        key = name.strip().casefold()
+        return next((t for t in self.templates.values() if t.name.strip().casefold() == key), None)
+
+    def add_template(self, t: Template) -> Template:
+        """Keep a template, in place of one with the same name (it takes that one's id)."""
+        old = self.template_named(t.name)
+        if old is not None:
+            self.templates.pop(old.id)
+            t.id = old.id
+        elif not safe_id(t.id) or t.id in self.templates:
+            t.id = new_id()
+        self.templates[t.id] = t
+        self.save_templates()
+        return t
+
+    def delete_template(self, template_id: str) -> None:
+        if self.templates.pop(template_id, None) is not None:
+            self.save_templates()

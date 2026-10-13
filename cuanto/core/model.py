@@ -1,5 +1,5 @@
 """What Cuánto keeps: budgets (a top sheet of categories, their accounts, and the lines in each), their
-globals, fringes and fees; your rate library; your profiles.
+globals, fringes and fees; your own templates; your rate library; your profiles.
 
 Plain dataclasses with to_dict()/from_dict(). from_dict() tolerates files from older and newer versions:
 unknown keys are ignored, missing keys get their default (defaults always mean "off" or empty), and a
@@ -387,6 +387,31 @@ class Budget:
 
 
 _PARTS = ("info", "fx", "globals", "fringes", "categories", "adjustments")
+
+
+# ---------------------------------------------------------------------------- your templates
+@dataclass
+class Template:
+    """A budget you keep to start new ones from (Save as Template…): its categories, accounts and lines,
+    globals, fringes and fees, and its rates unless you left them out (core/templates.from_budget)."""
+
+    id: str = field(default_factory=new_id)
+    name: str = ""
+    budget: Budget = field(default_factory=Budget)
+    created: str = field(default_factory=now_iso)
+
+    def to_dict(self) -> dict:
+        return {"id": self.id, "name": self.name, "created": self.created, "budget": self.budget.to_dict()}
+
+    @classmethod
+    def from_dict(cls, d: dict) -> Template:
+        raw = d.get("budget")
+        if not isinstance(raw, dict):
+            raise ValueError("a template without its budget")
+        t = cls(id=d.get("id", ""), name=_text(d.get("name")), budget=Budget.from_dict(raw))
+        _fix_id(t)
+        t.created = _text(d.get("created"), 32)
+        return t
 
 
 # ---------------------------------------------------------------------------- the rate library

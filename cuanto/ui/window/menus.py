@@ -37,6 +37,7 @@ class MenusMixin:
         f = bar.addMenu("File")
         act(f, "New", self.new_here, QKeySequence.StandardKey.New)
         act(f, "New Budget…", lambda: self.new_budget(), "Ctrl+Shift+N")
+        act(f, "Save as Template…", lambda: self.save_as_template())
         f.addSeparator()
         act(f, "Import…", self.import_any, "Ctrl+Shift+I")
         act(f, "Import CSV…", self.import_csv)

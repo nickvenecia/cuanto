@@ -14,7 +14,7 @@ from cuanto.ui.style import theme, tokens
 
 class ServicesMixin:
     def open_settings(self, pane: str = "general", **kw) -> None:
-        """Settings, at a section: general, profiles, account, shortcuts, data."""
+        """Settings, at a section: general, profiles, templates, account, shortcuts, data."""
         from cuanto.ui.dialogs.settings import SettingsDialog
 
         self.flush()
