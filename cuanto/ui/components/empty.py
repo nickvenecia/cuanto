@@ -54,6 +54,7 @@ class StartTile(QFrame):
         sub.setObjectName("StartDetail")
         for w in (name, sub):
             w.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            w.setWordWrap(True)  # the tile is a fixed width: a line too long for it goes on to the next
             lay.addWidget(w)
 
     def set_hot(self, on: bool) -> None:

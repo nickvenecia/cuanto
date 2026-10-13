@@ -57,7 +57,8 @@ cuanto/
   app.py           QApplication, fonts, stylesheet, rounded popups, every QLabel plain text, one window at a
                    time, --smoke-test
   cli.py           `python -m cuanto cli …`: pages, totals, templates and CSV without a window
-tests/             one file per area; conftest.py gives every test its own empty data folder; screenshot.py
+tests/             one file per area; conftest.py gives every test its own empty data folder; screenshot.py;
+                   cut_off.py (finds words cut off in a window)
 scripts/           make_icon.py (the "c." icon), release_notes.py
 packaging/         macos/, windows/ (Inno Setup), linux/ (AppImage, .desktop, install.sh)
 docs/              exchange.md (the JSON format), screenshot.png
@@ -133,6 +134,9 @@ pyinstaller cuanto.spec --noconfirm
   (`test_a_broken_file_is_set_aside_not_lost`).
 - Tests never touch real data: `tests/conftest.py` gives every test its own empty data folder.
 - Window tests run offscreen. After any UI change, look at the screenshots in dark, light and Yellow.
+- No words cut off: `tests/test_cut_off.py` opens every screen, state, panel, dialog and Settings pane (with the
+  fonts as drawn and a tenth wider) and asks `tests/cut_off.py` for text that doesn't fit. A new screen gets a line
+  there.
 - `python -m cuanto --smoke-test` opens the window, makes the pages and an Excel file, and quits; CI runs it on the
   packaged app on every system.
 

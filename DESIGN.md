@@ -126,6 +126,11 @@ Cuánto talks like a helpful person, not like software.
 - Buttons are verbs. "…" when they open a window or a file picker.
 - Errors say what happened and what to do: "Cuánto couldn't find the column titles. Put Description and Rate (or
   Total) in one row."
+- **Words are never cut off.** Text that might not fit wraps onto another line (`setWordWrap(True)`, the usual fix
+  inside anything of a fixed width: cards, tiles, the sidebar) or ends in "…" with the whole text in its tooltip
+  (`ElidedLabel`); fonts are wider on a Mac. Only if neither suits, give it more room or fewer words; never a
+  smaller font. `tests/cut_off.py` checks every screen (from `tests/test_cut_off.py`, also with fonts a tenth
+  wider); a new screen gets a line in that test.
 - No exclamation marks except a greeting, no emoji, no jargon. Industry words are plain words here: Above the
   Line, fringes, top sheet.
 
@@ -191,5 +196,6 @@ Every page is laid out once in `doc/render.py` and painted on any device, so pre
 2. New controls are `CONTROL_H` tall (or `SMALL_H`) and line up with their neighbours.
 3. Every icon-only button has a tooltip.
 4. Labels are short and in Title Case; sentences are plain sentences.
-5. Screenshots look right in dark, light, and in Yellow:
+5. No words cut off: a new screen or state has a line in `tests/test_cut_off.py`, and it passes.
+6. Screenshots look right in dark, light, and in Yellow:
    `QT_QPA_PLATFORM=offscreen python tests/screenshot.py OUT --look light --accent yellow`.
