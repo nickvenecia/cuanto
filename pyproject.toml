@@ -1,0 +1,70 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cuanto"
+dynamic = ["version"]
+description = "Film and video budgets: build them, see every number, track where the money goes."
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.11"
+authors = [{ name = "Nick Venecia" }]
+dependencies = ["PySide6-Essentials>=6.7", "certifi>=2024.2", "openpyxl>=3.1", "defusedxml>=0.7", "keyring>=25"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6", "pyinstaller>=6.10", "Pillow>=10.3"]
+
+[project.scripts]
+cuanto-cli = "cuanto.cli:main"
+
+[project.gui-scripts]
+cuanto = "cuanto.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "cuanto.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["cuanto*"]
+
+[tool.setuptools.package-data]
+cuanto = ["assets/*", "assets/fonts/*"]
+
+# ---------------------------------------------------------------- code style
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["build", "dist", "vendor"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes (unused imports, undefined names)
+    "I",        # import sorting
+    "B",        # bugbear (likely bugs)
+    "UP",       # modern Python syntax
+    "S",        # bandit (security)
+    "SIM",      # simplifications
+    "RUF",      # ruff-specific
+]
+ignore = [
+    "E501",     # long lines are wrapped by the formatter where possible
+    "S603",     # subprocess without shell: we never use shell=True and always pass lists
+    "S607",     # partial executable paths: open / explorer / xdg-open are system tools
+    "S310",     # urlopen: only fixed https URLs to GitHub (see core/update.py)
+    "SIM105",   # contextlib.suppress — explicit try/except reads clearer here
+    "RUF001", "RUF002", "RUF003",  # typographic characters (…, ’, ×, ·) are intentional UI text
+    "B008",
+    "RUF012",   # class-level tables (GROUPS) are read-only by convention
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S108", "B023", "E731"]
+"cuanto.spec" = ["F821"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["cuanto"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -p no:cacheprovider"

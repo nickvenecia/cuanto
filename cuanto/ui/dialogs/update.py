@@ -1,0 +1,272 @@
+"""Updates window: what's new in the latest Cuánto, and Update Now (download, swap in, reopen).
+
+core/update.py does the work; this window only shows it. MainWindow.check_updates() opens it.
+"""
+
+from __future__ import annotations
+
+import html
+import math
+import re
+import threading
+from pathlib import Path
+
+from PySide6.QtCore import QSize, QThread, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QTextBrowser,
+    QWidget,
+)
+
+from cuanto import __version__
+from cuanto.core import update
+from cuanto.core.log import get_logger
+from cuanto.ui.components.widgets import hbox, hint, vbox
+from cuanto.ui.style import theme, tokens
+from cuanto.ui.style.tokens import (
+    DIALOG_W_XWIDE,
+    NOTES_H,
+    NOTES_LINE,
+    SPACE_2,
+    SPACE_3,
+    SPACE_4,
+    SPACE_5,
+    TEXT_MD,
+    TEXT_SM,
+    WEIGHT_SEMIBOLD,
+)
+
+log = get_logger(__name__)
+
+
+def open_url(url: str) -> None:
+    """Open a web page in the browser (only https: release notes are written by other people too)."""
+    if QUrl(url).scheme() == "https":
+        QDesktopServices.openUrl(QUrl(url))
+
+
+class CheckThread(QThread):
+    """Asks GitHub for the latest release (never on the window's thread)."""
+
+    found = Signal(object)  # update.Release
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            self.found.emit(update.check())
+        except Exception as e:  # no internet, GitHub busy, an odd answer
+            log.info("update check failed: %s", e)
+            self.failed.emit(str(e))
+
+
+class DownloadThread(QThread):
+    progress = Signal(float)
+    ready = Signal(object)  # update.Plan
+    failed = Signal(str)
+
+    def __init__(self, release: update.Release, kind: str, parent=None):
+        super().__init__(parent)
+        self.release, self.kind = release, kind
+        self.cancel = threading.Event()
+
+    def run(self) -> None:
+        work: Path | None = None
+        try:
+            name = update.asset_name(self.kind)
+            asset = self.release.assets.get(name or "")
+            if asset is None:
+                raise ValueError(f"This release has no {name or 'file for this computer'}.")
+            work = update.new_work_folder()
+            f = update.download(asset, work, self.progress.emit, self.cancel)
+            self.ready.emit(update.prepare(self.kind, f))
+        except update.Canceled:
+            self.failed.emit("")
+        except Exception as e:
+            log.warning("update download failed", exc_info=True)
+            self.failed.emit(str(e) or "The update couldn't be downloaded.")
+
+
+class UpdateDialog(QDialog):
+    """Shows a release. `busy()` -> a reason not to restart now ('' if fine)."""
+
+    def __init__(self, release: update.Release, busy=lambda: "", parent: QWidget | None = None):
+        super().__init__(parent)
+        self.release, self.busy = release, busy
+        self.kind = update.install_kind()
+        self.plan: update.Plan | None = None
+        self.thread: DownloadThread | None = None
+        self.setWindowTitle("Update Cuánto")
+        self.setMinimumWidth(DIALOG_W_XWIDE)
+        lay = vbox(self, SPACE_5, SPACE_3)
+        title = QLabel(f"Cuánto {release.version} Is Here")
+        title.setObjectName("DialogTitle")
+        lay.addWidget(title)
+        lay.addWidget(hint(f"You have {__version__}. Your budgets, rates and settings stay as they are."))
+        self.notes = Notes(update.whats_new(release.notes))
+        lay.addWidget(self.notes, 1)
+        self.status = hint("")
+        self.status.hide()
+        lay.addWidget(self.status)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.hide()
+        lay.addWidget(self.bar)
+
+        row = hbox(spacing=SPACE_2)
+        page = QPushButton("See on GitHub")
+        page.setObjectName("Ghost")
+        page.clicked.connect(lambda: open_url(release.page))
+        row.addWidget(page)
+        row.addStretch(1)
+        self.btn_later = QPushButton("Later")
+        self.btn_later.clicked.connect(self._later)
+        row.addWidget(self.btn_later)
+        self.btn_go = QPushButton("Update Now")
+        self.btn_go.setObjectName("Primary")
+        self.btn_go.setDefault(True)
+        self.btn_go.clicked.connect(self._go)
+        row.addWidget(self.btn_go)
+        lay.addLayout(row)
+
+        why_not = update.can_update_here(self.kind)
+        if why_not:
+            self._say(why_not)
+            self.btn_go.setText("Download")
+            self.btn_go.clicked.disconnect()
+            self.btn_go.clicked.connect(lambda: (open_url(release.page), self.accept()))
+            if self.kind == "source":
+                self.btn_go.hide()
+
+    def look_changed(self) -> None:
+        self.notes.recolor()
+
+    def _say(self, text: str) -> None:
+        self.status.setText(text)
+        self.status.show()
+
+    def _go(self) -> None:
+        if self.plan is not None:  # downloaded: restart into the new version
+            reason = self.busy()
+            if reason:
+                self._say(reason)
+                return
+            self.accept()
+            return
+        self.btn_go.setEnabled(False)
+        self.btn_go.setText("Downloading…")
+        self.btn_later.setText("Cancel")
+        self.bar.setValue(0)
+        self.bar.show()
+        self._say("Downloading the new version…")
+        self.thread = DownloadThread(self.release, self.kind, self)
+        self.thread.progress.connect(lambda v: self.bar.setValue(int(v * 1000)))
+        self.thread.ready.connect(self._ready)
+        self.thread.failed.connect(self._failed)
+        self.thread.start()
+
+    def _ready(self, plan: update.Plan) -> None:
+        self.plan = plan
+        self.bar.setValue(1000)
+        self._say("Ready. Cuánto will close, update itself and open again in a few seconds.")
+        self.btn_go.setText("Restart Cuánto")
+        self.btn_go.setEnabled(True)
+        self.btn_later.setText("Later")
+
+    def _failed(self, msg: str) -> None:
+        self.bar.hide()
+        self.btn_go.setEnabled(True)
+        self.btn_go.setText("Try Again")
+        self.btn_later.setText("Later")
+        self._say(msg or "Download stopped.")
+
+    def _later(self) -> None:
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.cancel.set()
+            self.thread.wait(5000)
+            return
+        self.reject()
+
+    def done(self, r: int) -> None:
+        if self.thread is not None and self.thread.isRunning():
+            self.thread.cancel.set()
+            self.thread.wait(5000)
+        super().done(r)
+
+
+class Notes(QTextBrowser):
+    """What's new, in the app's own type: small section labels, a dot before each change, links in the accent.
+    As tall as what it says (up to NOTES_H, then it scrolls)."""
+
+    def __init__(self, blocks: list[tuple[str, str]], parent: QWidget | None = None):
+        super().__init__(parent)
+        self.blocks = blocks or [("text", "Fixes and improvements.")]
+        self.setObjectName("WhatsNew")
+        self.setOpenLinks(False)  # links go through open_url, which only opens https pages
+        self.anchorClicked.connect(lambda u: open_url(u.toString()))
+        self.document().setDocumentMargin(SPACE_4)
+        self.recolor()
+
+    def recolor(self) -> None:
+        """Draw the notes again in the current light or dark colors."""
+        self.document().setDefaultFont(theme.font(TEXT_MD))
+        self.document().setDefaultStyleSheet(
+            f"a {{ color: {tokens.ACCENT}; text-decoration: none; }}"
+            f"p {{ margin: 0; line-height: {NOTES_LINE}%; }}"
+            f".dot {{ color: {tokens.ACCENT}; }}"
+            f".label {{ color: {tokens.MUTED}; font-size: {TEXT_SM}px; font-weight: {WEIGHT_SEMIBOLD}; }}"
+        )
+        self.setHtml(_html(self.blocks))
+
+    def sizeHint(self) -> QSize:
+        doc = self.document().clone(self)
+        doc.setTextWidth(DIALOG_W_XWIDE - 2 * SPACE_5)  # the window opens this wide (words wrap the same)
+        tall = math.ceil(doc.size().height()) + 2 * self.frameWidth()
+        doc.deleteLater()
+        return QSize(DIALOG_W_XWIDE - 2 * SPACE_5, min(tall, NOTES_H))
+
+
+def _html(blocks: list[tuple[str, str]]) -> str:
+    """The notes as rich text. Every word is escaped first: a release's text is never read as HTML."""
+    out = []
+    for n, (kind, words) in enumerate(blocks):
+        before = blocks[n - 1][0] if n else ""
+        # space only above each block: a new section, a label's first line, the next line
+        top = 0 if not n else SPACE_5 if kind == "heading" else SPACE_2 if before == "heading" else SPACE_3
+        style = f' style="margin-top: {top}px"'
+        text = _inline(words)
+        if kind == "heading":
+            out.append(f'<p class="label"{style}>{text}</p>')
+        elif kind == "item":  # a dot, then the words (a list's own bullet sits too close to them)
+            out.append(
+                f'<table width="100%" cellspacing="0" cellpadding="0"{style}><tr>'
+                f'<td width="{SPACE_4}"><p class="dot">•</p></td><td><p>{text}</p></td></tr></table>'
+            )
+        else:
+            out.append(f"<p{style}>{text}</p>")
+    return "".join(out)
+
+
+_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_CODE = re.compile(r"`([^`]+)`")
+_LINK = re.compile(r"\[([^\]]+)\]\(([^)\s]+)\)")
+
+
+def _inline(words: str) -> str:
+    """**bold**, `code` (as plain words) and [links](https://…) (other links keep only their words)."""
+    text = _CODE.sub(r"\1", _BOLD.sub(r"<b>\1</b>", html.escape(words)))
+    return _LINK.sub(lambda m: f'<a href="{m[2]}">{m[1]}</a>' if m[2].startswith("https://") else m[1], text)
+
+
+def restart_into(plan: update.Plan) -> None:
+    """Start the helper that swaps the new version in, then quit."""
+    update.run(plan)
+    app = QApplication.instance()
+    if app is not None:
+        app.closeAllWindows()
+        app.quit()
