@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Cuánto
+Comment=Film and video budgets: build them, see every number.
+Exec="CUANTO_DIR/Cuanto"
+Icon=CUANTO_DIR/icon.png
+Terminal=false
+Categories=Office;AudioVideo;
