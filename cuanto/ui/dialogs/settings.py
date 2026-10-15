@@ -118,6 +118,9 @@ class SettingsDialog(QDialog):
         while lay.count():
             old = lay.takeAt(0).widget()
             if old is not None:
+                # hidden first, while it's whole, so the typing leaves it now: an embedded dialog (the profile,
+                # Sign In) hides itself as it's thrown away, and moving the typing then crashed Cuánto on Save
+                old.hide()
                 old.deleteLater()
         inner = w
         if scroll:

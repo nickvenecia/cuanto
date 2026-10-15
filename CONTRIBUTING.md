@@ -107,6 +107,14 @@ pyinstaller cuanto.spec --noconfirm
 - New model fields need defaults that mean "off" or "empty": old files are read through `from_dict()`.
 - Everything a person changes saves itself (`SAVE_DELAY_MS`), and every change to budgets, rates or profiles ends
   in `flush()` and `refresh()` (that's where undo marks it). New commands go in the menus with their key.
+- **Act once the click is over.** Anything a refresh can rebuild (start tiles, the sidebar's rows) acts once its
+  click is over (`QTimer.singleShot(0, self, …)`, `DetailsBase.later`), never inside it. Its click may open a window
+  or a menu, and whatever that window throws away is gone before the click is over: if it's the very thing that
+  was clicked, Cuánto crashes. `still_there_after` in `tests/test_window.py` catches it.
+- **Hide it before throwing it away.** A part of a window replaced while it shows (a Settings pane) is hidden,
+  then `deleteLater()`: an embedded dialog hides itself as it goes, and the typing inside it then jumps into
+  half-gone widgets and crashes Cuánto. A window test that types makes its window the active one first
+  (offscreen, nothing has the typing otherwise, and the crash never shows).
 - Every left list is a `LeftPanel`, every right panel a `SidePanel` (through `DetailsBase`).
 - Every number in the UI is a token; every font comes from `theme.font()`; dialogs end with `button_row()`.
 - Anything from outside (a CSV, a JSON file, a name) is data: shown as plain text (labels are plain app-wide;

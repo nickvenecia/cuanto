@@ -809,8 +809,8 @@ class MainWindow(MenusMixin, EditingMixin, TransferMixin, PagesMixin, ServicesMi
 
     def showEvent(self, e):
         super().showEvent(e)
-        if self.titlebar is not None:
-            QTimer.singleShot(0, self.titlebar.fit)
+        if self.titlebar is not None:  # tied to the bar: skipped if the window is gone before it runs
+            QTimer.singleShot(0, self.titlebar, self.titlebar.fit)
 
     def closeEvent(self, e):
         self.shutdown()

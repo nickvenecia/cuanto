@@ -26,7 +26,10 @@ def sheet_in(mime) -> Path | None:
 
 
 class StartTile(QFrame):
-    """One way to start: an icon, what it is, a few words. A click, Space or Return picks it."""
+    """One way to start: an icon, what it is, a few words. A click, Space or Return picks it.
+
+    What a tile starts runs just after the click is over: it may open a window, and a refresh while that window
+    is open can swap this very tile for another. A tile still busy with its click when that happens would crash."""
 
     clicked = Signal()
 
@@ -71,14 +74,17 @@ class StartTile(QFrame):
 
     def mouseReleaseEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton and self.rect().contains(e.position().toPoint()):
-            self.clicked.emit()
+            self._pick()
         super().mouseReleaseEvent(e)
 
     def keyPressEvent(self, e):
         if e.key() in (Qt.Key.Key_Space, Qt.Key.Key_Return, Qt.Key.Key_Enter):
-            self.clicked.emit()
+            self._pick()
             return
         super().keyPressEvent(e)
+
+    def _pick(self) -> None:
+        QTimer.singleShot(0, self, self.clicked.emit)  # once this click is over (see above)
 
 
 class EmptyPage(QWidget):

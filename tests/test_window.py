@@ -4,10 +4,15 @@ deleting, undo, importing and exporting, the page window, and what's dropped whe
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtGui import QContextMenuEvent
+from PySide6.QtTest import QTest
+from PySide6.QtWidgets import QApplication, QWidget
 
 from cuanto.core import calc, sample
 from cuanto.core.store import Library
@@ -33,6 +38,51 @@ def say_yes(monkeypatch) -> None:
     monkeypatch.setattr("cuanto.ui.window.editing.confirm", lambda *a, **k: True)
 
 
+def when_open(kind, do) -> None:
+    """`do(window)` once a window of this kind shows (it may open from inside a click and wait there)."""
+    tries = [500]
+
+    def look() -> None:
+        shown = [w for w in QApplication.topLevelWidgets() if isinstance(w, kind) and w.isVisible()]
+        if shown:
+            do(shown[0])
+        elif tries[0]:
+            tries[0] -= 1
+            QTimer.singleShot(10, look)
+
+    QTimer.singleShot(0, look)
+
+
+def wait_for(done, ms: int = 5000) -> None:
+    for _ in range(ms // 10):
+        if done():
+            return
+        QTest.qWait(10)
+    raise AssertionError("never happened")
+
+
+@contextmanager
+def still_there_after(widget: QWidget):
+    """A click on `widget` may open a window or a menu; anything that window throws away while it's open is
+    gone before the click is over. If that's `widget` itself, Cuánto crashes (on a Mac, at once). Fails if it
+    happens during the `with`."""
+    start = QThread.currentThread().loopLevel()
+    thrown = []
+    original = QWidget.deleteLater
+
+    def delete_later(w: QWidget) -> None:
+        if QThread.currentThread().loopLevel() > start and (w is widget or w.isAncestorOf(widget)):
+            thrown.append(type(widget).__name__)
+        original(w)
+
+    QWidget.deleteLater = delete_later
+    try:
+        yield
+    finally:
+        QWidget.deleteLater = original
+    assert not thrown, f"the {thrown[0]} was thrown away in the middle of its own click"
+
+
 def test_first_launch_shows_the_ways_to_start(qapp, data_folder):
     from cuanto.ui.window.main_window import MainWindow
 
@@ -40,6 +90,116 @@ def test_first_launch_shows_the_ways_to_start(qapp, data_folder):
     w.show()
     assert w.pages.currentWidget() is w.empty and len(w.empty.tiles) == 5
     assert not w.search.isVisibleTo(w) and not w.sidebar.heads["open"].isVisibleTo(w.sidebar)
+    w.close()
+
+
+def test_saving_your_profile_while_typing_in_it(qapp, data_folder, monkeypatch):
+    """Profile card › Edit Profile…, type a name, Save. Saving puts a fresh form in place of the one you typed
+    in, and throwing that one away with the typing still in it crashed Cuánto, every time."""
+    from PySide6.QtWidgets import QMenu, QPushButton
+
+    from cuanto.ui.dialogs.settings import SettingsDialog
+    from cuanto.ui.window.main_window import MainWindow
+
+    monkeypatch.setattr("cuanto.ui.dialogs.common.confirm", lambda *a, **k: True)
+    w = MainWindow(Library(data_folder).load())
+    w._restored = True
+    w.show()
+    card = w.sidebar.profile_card
+
+    def one_by_one(*steps) -> None:
+        """Each step once Settings has had a moment to itself, as between a person's clicks."""
+        if steps:
+            QTimer.singleShot(50, lambda: (steps[0](), one_by_one(*steps[1:])))
+
+    def type_and_click(settings, field: str, text: str, button: str = "") -> None:
+        form = settings.profile_editor
+        getattr(form, field).setFocus()
+        getattr(form, field).selectAll()
+        QTest.keyClicks(getattr(form, field), text)
+        click = (
+            form.save if not button else next(b for b in form.findChildren(QPushButton) if b.text() == button)
+        )
+        QTest.mouseClick(click, Qt.MouseButton.LeftButton)
+
+    def edit(settings) -> None:
+        settings.activateWindow()
+        assert QTest.qWaitForWindowActive(settings)  # (the typing only goes to the window in front)
+        one_by_one(
+            lambda: type_and_click(settings, "name", "Juniper Lane Films"),  # Add Profile
+            lambda: type_and_click(settings, "email", "hello@example.com"),  # Save Changes
+            settings.close,
+        )
+
+    def pick(menu) -> None:
+        when_open(SettingsDialog, edit)
+        next(a for a in menu.actions() if a.text() == "Edit Profile…").trigger()
+        menu.close()
+
+    when_open(QMenu, pick)
+    with still_there_after(card):
+        QTest.mouseClick(card, Qt.MouseButton.LeftButton)
+    saved = list(Library(data_folder).load().profiles.values())
+    assert [(p.name, p.email) for p in saved] == [("Juniper Lane Films", "hello@example.com")]
+    assert card.name.full_text() == "Juniper Lane Films"
+
+    def delete(settings) -> None:
+        settings.activateWindow()
+        assert QTest.qWaitForWindowActive(settings)
+        one_by_one(lambda: type_and_click(settings, "name", "Juniper", "Delete Profile…"), settings.close)
+
+    when_open(SettingsDialog, delete)
+    w.edit_profile()  # Settings › Profiles straight away
+    assert Library(data_folder).load().profiles == {}
+    w.close()
+
+
+def test_deleting_a_budget_from_its_row_in_the_sidebar(win, monkeypatch):
+    """Right-click › Delete… takes away the very row that was right-clicked, so its menu waits until the
+    right-click is over."""
+    from PySide6.QtWidgets import QMenu
+
+    say_yes(monkeypatch)
+    b = feature(win)
+    row = win.sidebar.rows[f"budget:{b.id}"]
+
+    def delete(menu) -> None:
+        next(a for a in menu.actions() if a.text() == "Delete…").trigger()
+        menu.close()
+
+    when_open(QMenu, delete)
+    at = row.rect().center()
+    with still_there_after(row):
+        QApplication.sendEvent(
+            row, QContextMenuEvent(QContextMenuEvent.Reason.Mouse, at, row.mapToGlobal(at))
+        )
+    wait_for(lambda: b.id not in win.lib.budgets)
+    assert b.id not in Library(win.lib.root).load().budgets
+    assert f"budget:{b.id}" not in win.sidebar.rows
+
+
+def test_the_mac_title_bar_never_fits_a_window_that_is_gone(qapp, data_folder, monkeypatch):
+    """The Mac's title bar fits itself just after the window shows. A window thrown away before then is left
+    alone: reaching into it would break every test after it on the Mac."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+
+    from cuanto.ui.components import titlebar
+    from cuanto.ui.window.main_window import MainWindow
+
+    monkeypatch.setattr(titlebar, "supported", lambda: True)  # the Mac's bar, on any computer
+    fits = []
+    monkeypatch.setattr(titlebar.TitleBar, "fit", lambda bar: fits.append(bar))
+    w = MainWindow(Library(data_folder).load())
+    w._restored = True
+    w.show()
+    wait_for(lambda: fits)  # a window that stays fits its bar
+    gone = MainWindow(Library(data_folder).load())
+    gone._restored = True
+    gone.show()
+    gone.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    QTest.qWait(20)
+    assert len(fits) == 1
     w.close()
 
 

@@ -2,6 +2,12 @@
 
 Plain words for the people using Cuánto. Every version's entries are what its Release and the update window say.
 
+## 1.1.1
+
+- Fixed a crash when saving your profile: Add Profile, Save Changes or Delete Profile… in Settings › Profiles
+  could close Cuánto.
+- Fixed a crash when right-clicking a budget in the sidebar and choosing Delete… or Duplicate.
+
 ## 1.1.0
 
 - Make your own templates: Save as Template… keeps a budget's categories, accounts, lines, globals, fringes and
