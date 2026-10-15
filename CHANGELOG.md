@@ -7,6 +7,8 @@ Plain words for the people using Cuánto. Every version's entries are what its R
 - Fixed a crash when saving your profile: Add Profile, Save Changes or Delete Profile… in Settings › Profiles
   could close Cuánto.
 - Fixed a crash when right-clicking a budget in the sidebar and choosing Delete… or Duplicate.
+- Scrolling a panel on the right over a long name scrolls the panel: the name no longer slides partly out of sight.
+- Scrolling past a dropdown or a date no longer takes your typing out of the field you're in.
 
 ## 1.1.0
 

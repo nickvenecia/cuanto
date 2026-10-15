@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PySide6.QtCore import (
     QEasingCurve,
     QPoint,
@@ -14,7 +16,7 @@ from PySide6.QtCore import (
     QVariantAnimation,
     Signal,
 )
-from PySide6.QtGui import QColor, QCursor, QFontMetrics, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QCursor, QFontMetrics, QFontMetricsF, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractButton,
     QButtonGroup,
@@ -794,15 +796,22 @@ class TitleEdit(QPlainTextEdit):
         self.textEdited.emit(t)
 
     def _fit(self) -> None:
+        # every line as tall as it's laid out: the font's rounded line spacing comes up a little short, and a
+        # wrapped title then scrolled inside itself (the wheel moved its words instead of the panel)
         doc = self.document()
-        lines = 0
+        one_line = math.ceil(QFontMetricsF(self.font()).lineSpacing())
+        h = 0.0
         block = doc.begin()
         while block.isValid():
-            lines += max(1, block.layout().lineCount())
+            layout = block.layout()
+            n = layout.lineCount()
+            h += sum(layout.lineAt(i).height() for i in range(n)) if n else one_line
             block = block.next()
         m = self.contentsMargins()
-        h = lines * self.fontMetrics().lineSpacing() + 2 * doc.documentMargin() + m.top() + m.bottom()
-        self.setFixedHeight(int(h) + 2)
+        self.setFixedHeight(math.ceil(h + 2 * doc.documentMargin()) + m.top() + m.bottom() + 2)
+
+    def wheelEvent(self, e):
+        e.ignore()  # it's always tall enough: the wheel scrolls the panel it's in
 
     def text(self) -> str:
         return self.toPlainText()

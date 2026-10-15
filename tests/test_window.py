@@ -218,6 +218,37 @@ def test_a_new_budget_from_a_template(qapp, data_folder, monkeypatch):
     w.close()
 
 
+def test_the_wheel_scrolls_the_panel_never_a_title_or_the_typing(win):
+    """A long name wraps onto more lines and shows whole: turning the wheel over it scrolls the panel, never the
+    name's own words out of sight. And scrolling past a dropdown or a date never takes the typing."""
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QAbstractSpinBox, QComboBox
+
+    b = feature(win)
+    win.go(f"budget:{b.id}")
+    win.open("line", b.categories[0].accounts[0].lines[0].id)
+    title = win.line_panel.name
+    for words in (1, 4, 12, 30):
+        title.setText(" ".join(["Steadicam"] * words))
+        QTest.qWait(20)
+        assert title.isVisible() and title.verticalScrollBar().maximum() == 0, f"{words} words scroll"
+        at = QPointF(10, 10)
+        down = QWheelEvent(at, QPointF(title.mapToGlobal(QPoint(10, 10))), QPoint(), QPoint(0, -120),
+                           Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase,
+                           False)  # fmt: skip
+        QApplication.sendEvent(title.viewport(), down)
+        assert title.verticalScrollBar().value() == 0 and not down.isAccepted()  # it goes on to the panel
+
+    controls = [
+        c for p in win.panels.values() for t in (QComboBox, QAbstractSpinBox) for c in p.findChildren(t)
+    ]
+    assert any(isinstance(c, QComboBox) for c in controls)
+    for c in controls:
+        c.ensurePolished()
+        assert c.focusPolicy() == Qt.FocusPolicy.StrongFocus  # a click or Tab, never the wheel going past
+
+
 def test_typing_a_line_in_its_panel_saves_and_adds_up(win):
     b = feature(win)
     win.go(f"budget:{b.id}")
