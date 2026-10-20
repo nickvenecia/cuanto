@@ -1,5 +1,5 @@
 -r requirements.txt
-Pillow==12.3.0  # build only: the Windows icon and scripts/make_icon.py
+Pillow==13.0.0  # build only: the Windows icon and scripts/make_icon.py
 pyinstaller==6.22.3
 pytest==9.1.1
 ruff==0.16.8
