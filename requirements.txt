@@ -1,6 +1,6 @@
 # Exact versions, so every build is the same (Dependabot proposes updates: .github/dependabot.yml)
 PySide6-Essentials==6.12.0
-certifi==2026.7.22  # the list of trusted certificates for HTTPS
+certifi==2026.10.23  # the list of trusted certificates for HTTPS
 openpyxl==3.1.5  # writing the Excel export
 defusedxml==0.7.1  # openpyxl uses it to read spreadsheet XML safely
 keyring==25.7.0  # the account sign-in lives in the system keychain, never in a file
